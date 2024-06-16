@@ -1,4 +1,4 @@
-FROM node:17 as builder
+FROM node:20 as builder
 
 WORKDIR /usr/src/app
 
@@ -28,6 +28,7 @@ COPY --from=builder /usr/src/app/package*.json ./
 # COPY --from=builder /usr/src/app/*.env ./
 # COPY --from=builder /usr/src/app/service-account.json ./
 COPY --from=builder /usr/src/app/build ./build
+COPY --from=builder /usr/src/app/src/shared ./build/shared
 COPY --from=builder /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/robots.txt ./robots.txt
 
