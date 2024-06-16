@@ -1,0 +1,15 @@
+node_modules/
+lib/
+build/
+
+prisma/generated/
+
+types-module/
+
+types/
+
+.env
+*env
+.env.*
+
+secrets.json

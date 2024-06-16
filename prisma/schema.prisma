@@ -1,0 +1,450 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator typegraphql {
+  provider   = "typegraphql-prisma"
+  output     = "../src/shared/typegraphql"
+  emitSchema = true
+  emitTranspiledCode = true
+}
+
+enum SYSTEM_ROLE {
+  SUPER_ADMIN
+  ADMIN
+  USER
+  WORKSPACE_OWNER
+  WORKSPACE_ADMIN
+  WORKSPACE_USER
+}
+
+// Models
+model User {
+  Tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  tenantId String?
+  // Mapping to authentication service
+  uid      String  @unique
+  // used to authenticate tenant user creation
+  uuid     String?
+
+  id       String @id @default(uuid()) @map("_id")
+  username String @unique
+  email    String @unique
+
+  systemRoles SYSTEM_ROLE[]
+
+  firstName String?
+  lastName  String?
+  avatar    String?
+
+  hasAcceptedTerms Boolean? @default(false)
+  isFirstTimeUser  Boolean? @default(true)
+  isVerified       Boolean? @default(false)
+  isActive         Boolean? @default(true)
+
+  NotificationSettings NotificationSettings?
+
+  Notifications Notification[] @relation("Subject")
+  Activity      Notification[] @relation("Actor")
+
+  Queries LLMQuery[]
+  Chats   Chat[]
+
+  Requests           Request[]
+  Comments           Comment[]
+  Replies            Reply[]
+  Reactions          Reaction[]
+  CreatedDocuments   Document[]
+  CreatedConnections Connection[]
+
+  Meetings       Meeting[] @relation("Participants", references: [id], fields: [participantIds])
+  participantIds String[]
+  OwnedMeetings  Meeting[] @relation("Owner")
+
+  Namespaces   Namespace[] @relation(references: [id], fields: [namespaceIds])
+  namespaceIds String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model NotificationSettings {
+  id String @id @default(uuid()) @map("_id")
+
+  newDocumentsIndexed Boolean @default(false)
+  documentUpdates     Boolean @default(false)
+  newRequests         Boolean @default(false)
+  namespaceUpdates    Boolean @default(false)
+  requestUpdates      Boolean @default(false)
+  commentsOnMyReviews Boolean @default(false)
+  repliesToMyReviews  Boolean @default(false)
+
+  User   User?   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  userId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Tenant {
+  id String @id @default(uuid()) @map("_id")
+
+  name String
+  slug String @unique
+
+  description String?
+
+  logoImage String?
+  avatar    String?
+
+  Users User[]
+
+  Queries     LLMQuery[]
+  Documents   Document[]
+  Connections Connection[]
+
+  acceptedUserEmailDomains String[]
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
+  Namespace Namespace[]
+  Meeting   Meeting[]
+}
+
+// Social Models
+enum REACTION_TYPE {
+  LIKE
+  LOVE
+  DISLIKE
+}
+
+model Comment {
+  id String @id @default(uuid()) @map("_id")
+
+  text       String
+  Document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  documentId String
+  Author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  authorId   String
+
+  Replies   Reply[]
+  Reactions Reaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Reply {
+  id String @id @default(uuid()) @map("_id")
+
+  text      String
+  Comment   Comment @relation(fields: [commentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  commentId String
+  Author    User    @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  authorId  String
+
+  Reactions Reaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Reaction {
+  id String @id @default(uuid()) @map("_id")
+
+  type REACTION_TYPE
+
+  Comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  commentId String?
+  Reply     Reply?   @relation(fields: [replyId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  replyId   String?
+  Author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  authorId  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+// Requests
+enum REQUEST_STATUS {
+  OPEN
+  CLOSED
+  CLOSED_WITH_PREJUDICE
+  RESOLVED
+}
+
+enum REQUEST_TYPE {
+  POST_REVIEW
+  COMMENT_REVIEW
+  PROFILE_REVIEW
+  HIGHER_ACCESS
+  HELP_REQUEST
+}
+
+model Request {
+  id String @id @default(uuid()) @map("_id")
+
+  reporterName  String?
+  reporterEmail String?
+  subject       String?
+  message       String?
+  type          REQUEST_TYPE
+
+  // If review requested, link the parent id
+  entityId String?
+
+  requestResolution REQUEST_STATUS @default(OPEN)
+
+  Reporter User?   @relation(fields: [userId], references: [id])
+  userId   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Notification {
+  id String @id @default(uuid()) @map("_id")
+
+  description String
+
+  User   User?   @relation("Subject", fields: [userId], references: [id])
+  userId String?
+
+  Actor   User?   @relation("Actor", fields: [actorId], references: [id])
+  actorId String?
+
+  entityId String?
+
+  hasBeenViewedBySubject Boolean @default(false)
+
+  link      String?
+  mediaLink String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+enum PUBLISH_STATUS {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  UNDER_REVIEW
+  PENDING_APPROVAL
+  IN_REVIEW
+  APPROVED
+  NO_ACTION_TAKEN
+  REJECTED_WITH_REASON
+  DECLINED
+  BANNED
+  SOFT_BANNED
+}
+
+enum CONNECTION_STATUS {
+  PENDING_APPROVAL
+  APPROVED
+  CONNECTED
+  NOT_CONNECTED
+}
+
+enum DOCUMENT_INDEX_STATUS {
+  INDEXED
+  NOT_INDEXED
+  INDEXING
+  INDEXING_FAILED
+  INDEXING_FAILED_LIMIT_REACHED
+  INDEXING_FAILED_DOCUMENT_INACCESSIBLE
+}
+
+model Chat {
+  id String @id @default(uuid()) @map("_id")
+
+  chatLink String?
+
+  User   User?   @relation(fields: [userId], references: [id])
+  userId String?
+
+  Messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+enum MESSAGE_ACTOR {
+  AI
+  ASSISTANT
+  SYSTEM
+  USER
+}
+
+model Message {
+  id String @id @default(uuid()) @map("_id")
+
+  content String
+
+  Chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  chatId String
+
+  actor MESSAGE_ACTOR
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model LLMQuery {
+  id String @id @default(uuid()) @map("_id")
+
+  Tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenantId String
+
+  queryLink String?
+
+  question String?
+  response String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  User      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+}
+
+model Document {
+  id String @id @default(uuid()) @map("_id")
+
+  publishStatus PUBLISH_STATUS        @default(DRAFT)
+  indexStatus   DOCUMENT_INDEX_STATUS @default(NOT_INDEXED)
+
+  Namespace   Namespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  namespaceId String
+
+  title            String
+  link             String?
+  url              String?
+  source           String?
+  shortDescription String?
+
+  splitDocumentIds String[]
+
+  documentType String?
+
+  Tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenantId String
+
+  Comments Comment[]
+
+  CreatedBy       User?   @relation(fields: [createdByUserId], references: [id])
+  createdByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Connection {
+  id String @id @default(uuid()) @map("_id")
+
+  connectionStatus CONNECTION_STATUS     @default(NOT_CONNECTED)
+  indexStatus      DOCUMENT_INDEX_STATUS @default(NOT_INDEXED)
+
+  Namespace   Namespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  namespaceId String
+
+  name             String
+  link             String?
+  url              String?
+  source           String?
+  shortDescription String?
+
+  apiKey    String?
+  apiSecret String?
+
+  spacesOrFolders String[]
+
+  splitDocumentIds String[]
+
+  Tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenantId String
+
+  CreatedBy       User?   @relation(fields: [createdByUserId], references: [id])
+  createdByUserId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Namespace {
+  id String @id @default(uuid()) @map("_id")
+
+  name        String  @unique
+  description String?
+
+  Connections Connection[]
+  Documents   Document[]
+
+  Users   User[]   @relation(references: [id], fields: [userIds])
+  userIds String[]
+
+  Tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenantId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Meeting {
+  id String @id @default(uuid()) @map("_id")
+
+  title String
+  link  String?
+
+  appointmentDate DateTime
+  appointmentId   String?
+
+  meetingLengthMinutes Int
+
+  transcriptLink String?
+
+  Participants   User[]   @relation("Participants", references: [id], fields: [participantIds])
+  participantIds String[]
+
+  Owner   User   @relation("Owner", fields: [ownerId], references: [id])
+  ownerId String
+
+  Tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenantId String
+
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @default(now()) @updatedAt
+  MeetingObjectives MeetingObjectives[]
+}
+
+model MeetingObjectives {
+  id String @id @default(uuid()) @map("_id")
+
+  title String
+  link  String?
+
+  backgroundInformation String?
+  objectives            String[]
+  agenda                String[]
+  outcomes              String[]
+  nextSteps             String[]
+  notes                 String[]
+  actionItems           String[]
+  decisions             String[]
+
+  Meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  meetingId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}

@@ -1,0 +1,16 @@
+node_modules/
+lib/
+build/
+
+src/shared/
+
+appTypes/
+
+types/
+
+.env
+*env
+.env.*
+
+secrets.json
+service-account.json
